@@ -51,11 +51,12 @@ def run_datou(uuid_str: str):
         import openhands.core.main as headless_main
         args = headless_main.parse_arguments()
         config: headless_main.AppConfig = headless_main.setup_config_from_args(args)
+        sid = headless_main.generate_sid(config, None)
         state: headless_main.State = headless_main.asyncio.run(
             headless_main.run_controller(
                 config=config,
                 initial_user_action=headless_main.MessageAction(content=article["article"]["prompt"]),
-                sid=uuid_str,
+                sid=sid,
                 fake_user_response_fn=headless_main.auto_continue_response,
             )
         )
@@ -71,8 +72,8 @@ def run_datou(uuid_str: str):
         traceback.print_exc()
         article["status"] = "failed"
     finally:
-        os.system(f"docker stop openhands-runtime-{uuid_str}")
-        os.system(f"docker rm openhands-runtime-{uuid_str}")
+        os.system(f"docker stop openhands-runtime-{sid}")
+        os.system(f"docker rm openhands-runtime-{sid}")
         json.dump(article, article_path.open("w"), ensure_ascii=False, indent=4)
 
 
