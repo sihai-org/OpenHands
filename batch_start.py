@@ -1,5 +1,6 @@
 import json
 import socket
+import traceback
 from pathlib import Path
 
 import docker
@@ -56,37 +57,41 @@ def main():
         print(f"Building docker image for {uuid_str}")
         image_name = f"{uuid_str}:latest"
         try:
-            image = docker_cli.images.get(name=image_name)
-        except docker.errors.ImageNotFound:
-            print(f"Image {image_name} not found, building...")
-            image = docker_build(dockerflie_path.parent, uuid_str)
+            try:
+                image = docker_cli.images.get(name=image_name)
+            except docker.errors.ImageNotFound:
+                print(f"Image {image_name} not found, building...")
+                image = docker_build(dockerflie_path.parent, uuid_str)
 
-        print(f"got image {image}, trying to run...")
+            print(f"got image {image}, trying to run...")
 
-        host_port = PORT_START
-        while check_port_in_use(host_port):
-            host_port += 1
+            host_port = PORT_START
+            while check_port_in_use(host_port):
+                host_port += 1
 
-        print(f"Running docker container for {uuid_str} on port {host_port}")
-        container_port = get_expose_port(dockerflie_path)
-        container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
-        print(f"Container {container.id} is running...")
+            print(f"Running docker container for {uuid_str} on port {host_port}")
+            container_port = get_expose_port(dockerflie_path)
+            container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
+            print(f"Container {container.id} is running...")
 
-        article_path = ARTICLE_BASE / f"{uuid_str}.json"
-        article = json.load(article_path.open())
+            article_path = ARTICLE_BASE / f"{uuid_str}.json"
+            article = json.load(article_path.open())
 
-        c2a.append({
-            "uuid": article["uuid"],
-            "url": article["url"],
-            "title": article["title"],
-            "executable": article["executable"],
-            "complexity": article["complexity"],
-            "confidence": article["confidence"],
-            "cost": article["cost"]["cost"],
-            "input_tokens": article["cost"]["input_tokens"],
-            "output_tokens": article["cost"]["output_tokens"],
-            "host_url": f"{BASE_URL}:{host_port}",
-        })
+            c2a.append({
+                "uuid": article["uuid"],
+                "url": article["url"],
+                "title": article["title"],
+                "executable": article["executable"],
+                "complexity": article["complexity"],
+                "confidence": article["confidence"],
+                "cost": article["cost"]["cost"],
+                "input_tokens": article["cost"]["input_tokens"],
+                "output_tokens": article["cost"]["output_tokens"],
+                "host_url": f"{BASE_URL}:{host_port}",
+            })
+        except:
+            traceback.print_exc()
+            print(f"Failed to build or run docker image for {uuid_str}")
 
     pd.DataFrame(c2a).to_csv(BASE_DIR / "c2a.csv", index=False)
 
