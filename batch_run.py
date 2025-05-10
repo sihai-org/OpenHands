@@ -21,12 +21,9 @@ LOG_BASE = BASE / "logs"
 LOG_BASE.mkdir(parents=True, exist_ok=True)
 
 
-def run_datou(article: dict):
-    uuid_str = article["uuid"]
+def run_datou(uuid_str: str):
     article_path = ARTICLES_DIR / f"{uuid_str}.json"
-    if article_path.exists():
-        # read article from disk if it exists
-        article = json.load(article_path.open())
+    article = json.load(article_path.open())
 
     if article["status"] == "done":
         print(f"Article {uuid_str} done, skipped.")
@@ -78,11 +75,10 @@ def run_datou(article: dict):
 
 def worker(task_queue: multiprocessing.Queue, result_queue: multiprocessing.Queue):
     while not task_queue.empty():
-        article = task_queue.get()
-        uuid_str = article["uuid"]
+        uuid_str = task_queue.get()
         res = ""
         try:
-            run_datou(article)
+            run_datou(uuid_str)
             res = f"{uuid_str} run success"
         except Exception as e:
             print(f"Error processing {uuid_str}: {e}")
@@ -109,7 +105,10 @@ def main():
     for article in filtered_articles:
         task_content = prompt.replace("{{content_source}}", f"{article['title']}\n{article['article']['md']}")
         article["article"]["prompt"] = task_content
-        task_queue.put(article)
+        uuid_str = article["uuid"]
+        article_path = ARTICLES_DIR / f"{uuid_str}.json"
+        json.dump(article, article_path.open("w"), ensure_ascii=False, indent=4)
+        task_queue.put(uuid_str)
 
     processes = []
     for _ in range(NUM_PROCESSES):
