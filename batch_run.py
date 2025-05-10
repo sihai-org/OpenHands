@@ -72,6 +72,7 @@ def run_datou(uuid_str: str):
         article["status"] = "failed"
     finally:
         os.system(f"docker stop openhands-runtime-{uuid_str}")
+        os.system(f"docker rm openhands-runtime-{uuid_str}")
         json.dump(article, article_path.open("w"), ensure_ascii=False, indent=4)
 
 
