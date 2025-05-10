@@ -1,0 +1,129 @@
+import json
+import multiprocessing
+import os
+import sys
+import traceback
+import uuid
+from pathlib import Path
+
+NUM_PROCESSES = 8
+
+BASE = Path("./ruic_32test")
+CONFIG_FILE = BASE / "config.toml"
+LLM_CONFIG = "openrouter-claude37-coreja-test32"
+WORKSPACE_BASE = BASE / "workspace"
+WORKSPACE_BASE.mkdir(parents=True, exist_ok=True)
+ARTICLES_FILE = BASE / "random_selected_articles.json"
+PROMPT_FILE = BASE / "prompt_c2a_v2.prompt"
+ARTICLES_DIR = BASE / "articles"
+ARTICLES_DIR.mkdir(parents=True, exist_ok=True)
+LOG_BASE = BASE / "logs"
+LOG_BASE.mkdir(parents=True, exist_ok=True)
+
+
+def run_datou(article: dict):
+    uuid_str = article["uuid"]
+    article_path = ARTICLES_DIR / f"{uuid_str}.json"
+    if article_path.exists():
+        # read article from disk if it exists
+        article = json.load(article_path.open())
+
+    if article["status"] == "done":
+        print(f"Article {uuid_str} done, skipped.")
+        return
+    workspace_dir = WORKSPACE_BASE / uuid_str
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    log_dir = LOG_BASE / uuid_str
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Running datou with task: {uuid_str}, title: {article['title']}, workspace_dir: {workspace_dir}")
+    sys.argv = [
+        f"main.py",
+        # f"--file={task_file}",
+        f"--config-file={CONFIG_FILE}",
+        f"--llm-config={LLM_CONFIG}",
+    ]
+    os.environ["WORKSPACE_BASE"] = str(workspace_dir)
+    os.environ["DATOU_LOG_DIR"] = str(log_dir)
+
+    article["status"] = "running"
+    json.dump(article, article_path.open("w"), ensure_ascii=False, indent=4)
+
+    try:
+        # Openhands main
+        import openhands.core.main as headless_main
+        args = headless_main.parse_arguments()
+        config: headless_main.AppConfig = headless_main.setup_config_from_args(args)
+        state: headless_main.State = headless_main.asyncio.run(
+            headless_main.run_controller(
+                config=config,
+                initial_user_action=headless_main.MessageAction(content=article["article"]["prompt"]),
+                sid=uuid_str,
+                fake_user_response_fn=headless_main.auto_continue_response,
+            )
+        )
+        article["cost"] = {
+            "input_tokens": state.metrics.accumulated_token_usage.prompt_tokens,
+            "output_tokens": state.metrics.accumulated_token_usage.completion_tokens,
+            "cost": state.metrics.accumulated_cost,
+        }
+        article["status"] = "done"
+    except Exception:
+        traceback.print_exc()
+        article["status"] = "failed"
+    finally:
+        os.system(f"docker stop openhands-runtime-{uuid_str}")
+        json.dump(article, article_path.open("w"), ensure_ascii=False, indent=4)
+
+
+def worker(task_queue: multiprocessing.Queue, result_queue: multiprocessing.Queue):
+    while not task_queue.empty():
+        article = task_queue.get()
+        uuid_str = article["uuid"]
+        res = ""
+        try:
+            run_datou(article)
+            res = f"{uuid_str} run success"
+        except Exception as e:
+            print(f"Error processing {uuid_str}: {e}")
+            res = traceback.format_exc()
+        finally:
+            result_queue.put(res)
+
+
+def filter_condition(article):
+    return article["executable"] and article["complexity"] >= 2
+
+
+def main():
+    with ARTICLES_FILE.open() as f:
+        articles = json.load(f)
+    print(f"Loaded {len(articles)} articles")
+    filtered_articles = articles  # [article for article in articles if filter_condition(article)]
+    print(f"{len(filtered_articles)} articles to process:")
+    # print(*[article["title"] for article in remained_articles], sep="\n")
+    prompt = PROMPT_FILE.read_text()
+
+    task_queue, result_queue = multiprocessing.Queue(), multiprocessing.Queue()
+
+    for article in filtered_articles:
+        task_content = prompt.replace("{{content_source}}", f"{article['title']}\n{article['article']['md']}")
+        article["article"]["prompt"] = task_content
+        task_queue.put(article)
+
+    processes = []
+    for _ in range(NUM_PROCESSES):
+        p = multiprocessing.Process(target=worker, args=(task_queue, result_queue))
+        processes.append(p)
+        p.start()
+
+    for p in processes:
+        p.join()
+
+    while not result_queue.empty():
+        res = result_queue.get()
+        print(res)
+
+
+if __name__ == "__main__":
+    main()
