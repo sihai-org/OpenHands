@@ -193,6 +193,33 @@ async def run_controller(
     except Exception as e:
         logger.error(f'Exception in main loop: {e}')
 
+
+    def safe_get(x):
+        try:
+            return x()
+        except:
+            return None
+
+    final_state = controller.get_state()
+
+    agent_state = lambda: final_state.agent_state
+    accumulate_cost = lambda: final_state.metrics.accumulated_cost
+    per_costs = lambda: [per_cost.cost for per_cost in final_state.metrics.costs]
+    session_id = lambda: final_state.session_id
+    iter_count = lambda: final_state.iteration
+    input_token = lambda: final_state.metrics.accumulated_token_usage.prompt_tokens
+    output_token = lambda: final_state.metrics.accumulated_token_usage.completion_tokens
+
+    logger.info(f'''[FINAL_STATE]
+        session_id: {safe_get(session_id)},
+        state: {safe_get(agent_state)},
+        iter_count: {safe_get(iter_count)},
+        input_tokens: {safe_get(input_token)},
+        output_token: {safe_get(output_token)},
+        per_costs: {safe_get(per_costs)},
+        total_cost: {safe_get(accumulate_cost)}
+    ''')
+
     # save session when we're about to close
     if config.file_store is not None and config.file_store != 'memory':
         end_state = controller.get_state()
