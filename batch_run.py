@@ -64,6 +64,8 @@ def run_datou(uuid_str: str):
             "output_tokens": state.metrics.accumulated_token_usage.completion_tokens,
             "cost": state.metrics.accumulated_cost,
         }
+        if state.agent_state is not headless_main.AgentState.FINISHED:
+            raise Exception(f"Task not finished: {state.agent_state}")
         article["status"] = "done"
     except Exception:
         traceback.print_exc()
@@ -107,7 +109,8 @@ def main():
         article["article"]["prompt"] = task_content
         uuid_str = article["uuid"]
         article_path = ARTICLES_DIR / f"{uuid_str}.json"
-        json.dump(article, article_path.open("w"), ensure_ascii=False, indent=4)
+        if not article_path.exists():
+            json.dump(article, article_path.open("w"), ensure_ascii=False, indent=4)
         task_queue.put(uuid_str)
 
     processes = []
