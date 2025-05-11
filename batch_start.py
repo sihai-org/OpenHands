@@ -2,10 +2,12 @@ import json
 import socket
 import traceback
 from pathlib import Path
+from time import sleep
 
 import docker
 import docker.errors
 import pandas as pd
+import requests
 
 BASE_DIR = Path("ruic_32test")
 WORKSPACE_BASE = BASE_DIR / "workspace"
@@ -74,8 +76,19 @@ def main():
             container_port = get_expose_port(dockerfile_path)
             container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
             print(f"Container {container.id} is running...")
+            sleep(5)
+            print("Sleep for 5s to make sure container is alive...")
+            alive = False
+            try:
+                resp = requests.get(f"http://localhost:{host_port}")
+                resp.raise_for_status()
+                print(f"http://localhost:{host_port} is alive.")
+                alive = True
+            except:
+                traceback.print_exc()
+                print(f"task {uuid_str} is not alive.")
+                alive = False
 
-            article_path = ARTICLE_BASE / f"{uuid_str}.json"
             article = json.load(article_path.open())
 
             c2a.append({
@@ -88,7 +101,7 @@ def main():
                 "cost": article["cost"]["cost"],
                 "input_tokens": article["cost"]["input_tokens"],
                 "output_tokens": article["cost"]["output_tokens"],
-                "host_url": f"{BASE_URL}:{host_port}",
+                "host_url": f"{BASE_URL}:{host_port}" if alive else "",
             })
         except:
             traceback.print_exc()
