@@ -2,6 +2,7 @@ import importlib
 import json
 import multiprocessing
 import os
+import shutil
 import sys
 import traceback
 from pathlib import Path
@@ -24,13 +25,19 @@ LOG_BASE.mkdir(parents=True, exist_ok=True)
 def run_datou(uuid_str: str):
     article_path = ARTICLES_DIR / f"{uuid_str}.json"
     article = json.load(article_path.open())
+    workspace_dir = WORKSPACE_BASE / uuid_str
+    log_dir = LOG_BASE / uuid_str
 
     if article["status"] == "done":
         print(f"Article {uuid_str} done, skipped.")
         return
-    workspace_dir = WORKSPACE_BASE / uuid_str
+
+    print(f"Article {uuid_str} not in init status, cleaning workspace and logs...")
+    if workspace_dir.exists():
+        shutil.rmtree(workspace_dir, ignore_errors=True)
+    if log_dir.exists():
+        shutil.rmtree(log_dir, ignore_errors=True)
     workspace_dir.mkdir(parents=True, exist_ok=True)
-    log_dir = LOG_BASE / uuid_str
     log_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Running datou with task: {uuid_str}, title: {article['title']}, workspace_dir: {workspace_dir}")
