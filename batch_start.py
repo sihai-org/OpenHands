@@ -52,8 +52,9 @@ def get_expose_port(dockerfile_path: Path):
 
 def main():
     c2a = []
-    for dockerflie_path in WORKSPACE_BASE.glob("**/Dockerfile"):
-        uuid_str = dockerflie_path.parent.parent.name
+    for article_path in ARTICLE_BASE.iterdir():
+        uuid_str = article_path.stem
+        dockerfile_path = list((WORKSPACE_BASE / uuid_str).glob("*/Dockerfile"))[0]
         print(f"Building docker image for {uuid_str}")
         image_name = f"{uuid_str}:latest"
         try:
@@ -61,7 +62,7 @@ def main():
                 image = docker_cli.images.get(name=image_name)
             except docker.errors.ImageNotFound:
                 print(f"Image {image_name} not found, building...")
-                image = docker_build(dockerflie_path.parent, uuid_str)
+                image = docker_build(dockerfile_path.parent, uuid_str)
 
             print(f"got image {image}, trying to run...")
 
@@ -70,7 +71,7 @@ def main():
                 host_port += 1
 
             print(f"Running docker container for {uuid_str} on port {host_port}")
-            container_port = get_expose_port(dockerflie_path)
+            container_port = get_expose_port(dockerfile_path)
             container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
             print(f"Container {container.id} is running...")
 
