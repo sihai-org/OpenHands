@@ -1,9 +1,9 @@
+import importlib
 import json
 import multiprocessing
 import os
 import sys
 import traceback
-import uuid
 from pathlib import Path
 
 NUM_PROCESSES = 8
@@ -48,6 +48,8 @@ def run_datou(uuid_str: str):
 
     try:
         # Openhands main
+        import openhands.core.logger
+        importlib.reload(openhands.core.logger)
         import openhands.core.main as headless_main
         args = headless_main.parse_arguments()
         config: headless_main.AppConfig = headless_main.setup_config_from_args(args)
@@ -91,8 +93,8 @@ def worker(task_queue: multiprocessing.Queue, result_queue: multiprocessing.Queu
             result_queue.put(res)
 
 
-def filter_condition(article):
-    return article["executable"] and article["complexity"] >= 2
+# def filter_condition(article):
+#     return article["executable"] and article["complexity"] >= 2
 
 
 def main():
