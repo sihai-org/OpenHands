@@ -9,7 +9,7 @@ import docker.errors
 import pandas as pd
 import requests
 
-BASE_DIR = Path("ruic_32test")
+BASE_DIR = Path("ruic_first200")
 WORKSPACE_BASE = BASE_DIR / "workspace"
 ARTICLE_BASE = BASE_DIR / "articles"
 BASE_URL = "http://articles.datou.me"

@@ -8,12 +8,12 @@ from pathlib import Path
 
 NUM_PROCESSES = 8
 
-BASE = Path("./ruic_32test")
+BASE = Path("./ruic_first200")
 CONFIG_FILE = BASE / "config.toml"
-LLM_CONFIG = "openrouter-claude37-coreja-test32"
+LLM_CONFIG = "openrouter-claude37-csdn"
 WORKSPACE_BASE = BASE / "workspace"
 WORKSPACE_BASE.mkdir(parents=True, exist_ok=True)
-ARTICLES_FILE = BASE / "random_selected_articles.json"
+ARTICLES_FILE = BASE / "selected_articles.json"
 PROMPT_FILE = BASE / "prompt_c2a_v2.prompt"
 ARTICLES_DIR = BASE / "articles"
 ARTICLES_DIR.mkdir(parents=True, exist_ok=True)
