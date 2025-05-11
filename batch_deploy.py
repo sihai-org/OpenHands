@@ -52,11 +52,16 @@ def get_expose_port(dockerfile_path: Path):
     raise ValueError(f"No exposed port for {dockerfile_path}")
 
 
+# 并发执行deploy
+
 def main():
     c2a = []
     for article_path in ARTICLE_BASE.iterdir():
         uuid_str = article_path.stem
-        dockerfile_path = list((WORKSPACE_BASE / uuid_str).glob("*/Dockerfile"))[0]
+        dockerfile_list = list((WORKSPACE_BASE / uuid_str).glob("*/Dockerfile"))
+        dockerfile_path = dockerfile_list[0] if dockerfile_list else None
+        if not dockerfile_path:
+            continue
         print(f"Building docker image for {uuid_str}")
         image_name = f"{uuid_str}:latest"
         try:
@@ -76,6 +81,7 @@ def main():
             container_port = get_expose_port(dockerfile_path)
             container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
             print(f"Container {container.id} is running...")
+            # TODO: 睡久一点
             sleep(5)
             print("Sleep for 5s to make sure container is alive...")
             alive = False
