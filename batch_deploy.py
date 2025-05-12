@@ -22,14 +22,21 @@ def docker_build(work_dir: Path, uuid_str: str):
     return docker_cli.images.build(path=str(work_dir), tag=f"{uuid_str}:latest", rm=True)
 
 
-def docker_run(image: str, uuid_str: str, host_port: int, container_port: int):
+def docker_run(image: str, uuid_str: str, host_port: int, container_port: int, restart: bool):
+    if restart:
+        auto_remove = False
+        restart_policy = {"Name": "always"}
+    else:
+        auto_remove = True
+        restart_policy = None
     container = docker_cli.containers.run(
         image,
         detach=True,
         ports={f"{container_port}/tcp": host_port},
         stdin_open=True,
         tty=True,
-        auto_remove=True,
+        auto_remove=auto_remove,
+        restart_policy=restart_policy,
         name=uuid_str,
     )
     return container
@@ -52,7 +59,7 @@ def get_expose_port(dockerfile_path: Path):
     raise ValueError(f"No exposed port for {dockerfile_path}")
 
 
-# 并发执行deploy
+# TODO: 并发执行deploy
 
 def main():
     c2a = []
@@ -79,24 +86,34 @@ def main():
 
             print(f"Running docker container for {uuid_str} on port {host_port}")
             container_port = get_expose_port(dockerfile_path)
-            container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
-            print(f"Container {container.id} is running...")
-            # TODO: 睡久一点
-            sleep(5)
-            print("Sleep for 5s to make sure container is alive...")
+            container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port, restart=False)
+            print(f"Trying to start container {container.id}...")
             alive = False
             try:
+                print("sleeping for 15 seconds to wait for container to start...")
+                sleep(15)
+                print("Checking if container is alive...")
                 resp = requests.get(f"http://localhost:{host_port}")
                 resp.raise_for_status()
                 print(f"http://localhost:{host_port} is alive.")
                 alive = True
             except:
-                traceback.print_exc()
+                # traceback.print_exc()
                 print(f"task {uuid_str} is not alive.")
                 alive = False
+            finally:
+                container.stop()
+                print(f"Container {container.id} stopped and removed.")
+
+            if alive:
+                print(f"App {uuid_str} is deployable automatically, running...")
+                sleep(5)
+                container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port, restart=True)
+                print(f"Container {container.id} is deployed!")
+            else:
+                print(f"Container {uuid_str} is not deployable.")
 
             article = json.load(article_path.open())
-
             c2a.append({
                 "uuid": article["uuid"],
                 "url": article["url"],
