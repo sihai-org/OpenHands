@@ -1,13 +1,13 @@
 import json
 import socket
+import time
 import traceback
 from pathlib import Path
-from time import sleep
 
 import docker
 import docker.errors
+import docker.models.containers
 import pandas as pd
-import requests
 
 BASE_DIR = Path("ruic_first200")
 WORKSPACE_BASE = BASE_DIR / "workspace"
@@ -22,22 +22,22 @@ def docker_build(work_dir: Path, uuid_str: str):
     return docker_cli.images.build(path=str(work_dir), tag=f"{uuid_str}:latest", rm=True)
 
 
-def docker_run(image: str, uuid_str: str, host_port: int, container_port: int, restart: bool):
-    if restart:
-        auto_remove = False
-        restart_policy = {"Name": "always"}
-    else:
-        auto_remove = True
-        restart_policy = None
+def docker_run(image: str, uuid_str: str, host_port: int, container_port: int):
     container = docker_cli.containers.run(
         image,
         detach=True,
         ports={f"{container_port}/tcp": host_port},
         stdin_open=True,
         tty=True,
-        auto_remove=auto_remove,
-        restart_policy=restart_policy,
+        auto_remove=False,
         name=uuid_str,
+        healthcheck={
+            "test": ["CMD", "curl", "-s", f"http://localhost:{host_port}"],
+            "interval": 5 * 1000000000,
+            "timeout": 3 * 1000000000,
+            "start_period": 10 * 1000000000,
+            "retries": 3,
+        },
     )
     return container
 
@@ -59,11 +59,45 @@ def get_expose_port(dockerfile_path: Path):
     raise ValueError(f"No exposed port for {dockerfile_path}")
 
 
-# TODO: 并发执行deploy
+def check_aliveness(container: docker.models.containers.Container, timeout: int = 15) -> tuple[bool, str | None]:
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            time.sleep(1)
+            container.reload()
+            if container.status == "running":
+                if container.health == "healthy":
+                    return True, None
+                elif container.health == "unhealthy":
+                    return False, f"container is {container.status} but {container.health}, might be port mapping issue"
+            elif container.status == "exited":
+                return False, f"Container exited with code {container.attrs['State']['ExitCode']}"
+        except:
+            return False, traceback.format_exc()
+    return False, f"aliveness check timeout after {timeout} seconds"
 
+
+# TODO: 并发执行deploy
 def main():
     c2a = []
     for article_path in ARTICLE_BASE.iterdir():
+        article = json.load(article_path.open())
+        item = {
+            "uuid": article["uuid"],
+            "url": article["url"],
+            "title": article["title"],
+            "executable": article["executable"],
+            "complexity": article["complexity"],
+            "confidence": article["confidence"],
+            "cost": article["cost"]["cost"],
+            "input_tokens": article["cost"]["input_tokens"],
+            "output_tokens": article["cost"]["output_tokens"],
+            "host_url": None,
+            "is_auto_deployed": False,
+            "deploy_failed_reason": None,
+        }
+        c2a.append(item)
+
         uuid_str = article_path.stem
         dockerfile_list = list((WORKSPACE_BASE / uuid_str).glob("*/Dockerfile"))
         dockerfile_path = dockerfile_list[0] if dockerfile_list else None
@@ -86,49 +120,25 @@ def main():
 
             print(f"Running docker container for {uuid_str} on port {host_port}")
             container_port = get_expose_port(dockerfile_path)
-            container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port, restart=False)
-            print(f"Trying to start container {container.id}...")
-            alive = False
-            try:
-                print("sleeping for 15 seconds to wait for container to start...")
-                sleep(15)
-                print("Checking if container is alive...")
-                resp = requests.get(f"http://localhost:{host_port}")
-                resp.raise_for_status()
-                print(f"http://localhost:{host_port} is alive.")
-                alive = True
-            except:
-                # traceback.print_exc()
-                print(f"task {uuid_str} is not alive.")
-                alive = False
-            finally:
+            container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
+            print(f"Trying to start container {container.name}...")
+            alive, failed_reason = check_aliveness(container)
+            if alive:
+                print(f"Container for task {container.name} is alive and healthy. Setting auto restart on it.")
+                container.update(restart_policy={"Name": "always"})
+            else:
+                item["deploy_failed_reason"] = failed_reason
+                print(f"task {uuid_str} is not alive: {failed_reason}")
                 container.stop()
+                container.remove(force=True)
                 print(f"Container {container.id} stopped and removed.")
 
-            if alive:
-                print(f"App {uuid_str} is deployable automatically, running...")
-                sleep(5)
-                container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port, restart=True)
-                print(f"Container {container.id} is deployed!")
-            else:
-                print(f"Container {uuid_str} is not deployable.")
-
-            article = json.load(article_path.open())
-            c2a.append({
-                "uuid": article["uuid"],
-                "url": article["url"],
-                "title": article["title"],
-                "executable": article["executable"],
-                "complexity": article["complexity"],
-                "confidence": article["confidence"],
-                "cost": article["cost"]["cost"],
-                "input_tokens": article["cost"]["input_tokens"],
-                "output_tokens": article["cost"]["output_tokens"],
-                "host_url": f"{BASE_URL}:{host_port}" if alive else "",
-            })
+            item["host_url"] = f"{BASE_URL}:{host_port}"
+            item["is_auto_deployed"] = alive
         except:
             traceback.print_exc()
             print(f"Failed to build or run docker image for {uuid_str}")
+            item["deploy_failed_reason"] = f"Failed to build or run: {traceback.format_exc()}"
 
     pd.DataFrame(c2a).to_csv(BASE_DIR / "c2a.csv", index=False)
 
