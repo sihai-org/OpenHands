@@ -131,7 +131,6 @@ def main():
                 container.remove(force=True)
             print(f"Running docker container for {uuid_str} on port {host_port}")
             container_port = get_expose_port(dockerfile_path)
-            print(f"Trying to start container {container.name}...")
             container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
             alive, failed_reason = check_aliveness(container, host_port)
             if alive:
