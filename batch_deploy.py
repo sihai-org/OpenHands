@@ -13,6 +13,7 @@ import requests
 BASE_DIR = Path("ruic_first200")
 WORKSPACE_BASE = BASE_DIR / "workspace"
 ARTICLE_BASE = BASE_DIR / "articles"
+ARTICLES = BASE_DIR / "selected_articles.json"
 BASE_URL = "http://articles.datou.me"
 PORT_START = 9001
 
@@ -85,7 +86,9 @@ def check_aliveness(
 # TODO: 并发执行deploy
 def main():
     c2a = []
-    for article_path in ARTICLE_BASE.iterdir():
+    articles = json.load(ARTICLES.open())
+    for origin_article in articles:
+        article_path = ARTICLE_BASE / f"{origin_article['uuid']}.json"
         article = json.load(article_path.open())
         if article["status"] != "done":
             continue
