@@ -54,7 +54,7 @@ def get_port(dockerfile_path: Path):
                     port = line.split("=")[-1]
                 else:
                     port = line.split()[-1]
-                return port
+                return port.strip()
     return 8000
 
 
