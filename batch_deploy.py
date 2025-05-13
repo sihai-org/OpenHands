@@ -86,10 +86,14 @@ def check_aliveness(
 # TODO: 并发执行deploy
 def main():
     c2a = []
-    articles = json.load(ARTICLES.open())
+    with ARTICLES.open() as f:
+        articles = json.load(f)
     for origin_article in articles:
         article_path = ARTICLE_BASE / f"{origin_article['uuid']}.json"
-        article = json.load(article_path.open())
+        if not article_path.exists():
+            continue
+        with article_path.open() as f:
+            article = json.load(f)
         if article["status"] != "done":
             continue
         item = {
