@@ -27,6 +27,7 @@ def docker_run(image: str, uuid_str: str, host_port: int, container_port: int):
     container = docker_cli.containers.run(
         image,
         detach=True,
+        environment={"PORT": str(container_port)},
         ports={f"{container_port}/tcp": host_port},
         stdin_open=True,
         tty=True,
@@ -45,12 +46,16 @@ def check_port_in_use(port: int):
             return True  # 端口被占用
 
 
-def get_expose_port(dockerfile_path: Path):
+def get_port(dockerfile_path: Path):
     with open(dockerfile_path, "r") as f:
         for line in f:
-            if line.startswith("EXPOSE"):
-                return int(line.split()[1])
-    raise ValueError(f"No exposed port for {dockerfile_path}")
+            if line.startswith("ENV") and "PORT" in line:
+                if "=" in line:
+                    port = line.split("=")[-1]
+                else:
+                    port = line.split()[-1]
+                return port
+    return 8000
 
 
 def check_aliveness(
@@ -130,7 +135,7 @@ def main():
                 print(f"Container {uuid_str} exists, removing...")
                 container.remove(force=True)
             print(f"Running docker container for {uuid_str} on port {host_port}")
-            container_port = get_expose_port(dockerfile_path)
+            container_port = get_port(dockerfile_path)
             container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
             alive, failed_reason = check_aliveness(container, host_port)
             if alive:
