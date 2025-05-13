@@ -104,6 +104,7 @@ def main():
         dockerfile_list = list((WORKSPACE_BASE / uuid_str).glob("*/Dockerfile"))
         dockerfile_path = dockerfile_list[0] if dockerfile_list else None
         if not dockerfile_path:
+            item["deploy_failed_reason"] = "no dockerfile found"
             continue
         print(f"Building docker image for {uuid_str}")
         image_name = f"{uuid_str}:latest"
@@ -123,12 +124,12 @@ def main():
             print(f"Check if container {uuid_str} exists")
             container = docker_cli.containers.get(uuid_str)
             if container:
-                print(f"Container {uuid_str} exists")
-            else:
-                print(f"Running docker container for {uuid_str} on port {host_port}")
-                container_port = get_expose_port(dockerfile_path)
-                print(f"Trying to start container {container.name}...")
-                container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
+                print(f"Container {uuid_str} exists, removing...")
+                container.remove(force=True)
+            print(f"Running docker container for {uuid_str} on port {host_port}")
+            container_port = get_expose_port(dockerfile_path)
+            print(f"Trying to start container {container.name}...")
+            container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
             alive, failed_reason = check_aliveness(container, host_port)
             if alive:
                 print(f"Container for task {container.name} is alive and healthy. Setting auto restart on it.")
