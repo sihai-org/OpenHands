@@ -8,6 +8,7 @@ import docker
 import docker.errors
 import docker.models.containers
 import pandas as pd
+import requests
 
 BASE_DIR = Path("ruic_first200")
 WORKSPACE_BASE = BASE_DIR / "workspace"
@@ -31,13 +32,6 @@ def docker_run(image: str, uuid_str: str, host_port: int, container_port: int):
         tty=True,
         auto_remove=False,
         name=uuid_str,
-        healthcheck={
-            "test": ["CMD", "curl", "-s", f"http://localhost:{host_port}"],
-            "interval": 5 * 1000000000,
-            "timeout": 3 * 1000000000,
-            "start_period": 10 * 1000000000,
-            "retries": 3,
-        },
     )
     return container
 
@@ -59,22 +53,23 @@ def get_expose_port(dockerfile_path: Path):
     raise ValueError(f"No exposed port for {dockerfile_path}")
 
 
-def check_aliveness(container: docker.models.containers.Container, timeout: int = 15) -> tuple[bool, str | None]:
+def check_aliveness(
+        container: docker.models.containers.Container, host_port, timeout: int = 20, interval: int = 3
+) -> tuple[bool, str | None]:
     start = time.time()
     while time.time() - start < timeout:
         try:
-            time.sleep(1)
             container.reload()
             if container.status == "running":
-                if container.health == "healthy":
+                resp = requests.get(f"http://localhost:{host_port}", timeout=5)
+                if resp.status_code == 200:
                     return True, None
-                elif container.health == "unhealthy":
-                    return False, f"container is {container.status} but {container.health}, might be port mapping issue"
             elif container.status == "exited":
                 return False, f"Container exited with code {container.attrs['State']['ExitCode']}"
+            time.sleep(interval)
         except:
             return False, traceback.format_exc()
-    return False, f"aliveness check timeout after {timeout} seconds"
+    return False, f"aliveness check timeout after {timeout} seconds, container status: {container.status}"
 
 
 # TODO: 并发执行deploy
@@ -82,6 +77,8 @@ def main():
     c2a = []
     for article_path in ARTICLE_BASE.iterdir():
         article = json.load(article_path.open())
+        if article["status"] != "done":
+            continue
         item = {
             "uuid": article["uuid"],
             "url": article["url"],
@@ -122,7 +119,7 @@ def main():
             container_port = get_expose_port(dockerfile_path)
             container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
             print(f"Trying to start container {container.name}...")
-            alive, failed_reason = check_aliveness(container)
+            alive, failed_reason = check_aliveness(container, host_port)
             if alive:
                 print(f"Container for task {container.name} is alive and healthy. Setting auto restart on it.")
                 container.update(restart_policy={"Name": "always"})
