@@ -94,8 +94,6 @@ def main():
             continue
         with article_path.open() as f:
             article = json.load(f)
-        if article["status"] != "done":
-            continue
         item = {
             "uuid": article["uuid"],
             "url": article["url"],
@@ -106,11 +104,15 @@ def main():
             "cost": article["cost"]["cost"],
             "input_tokens": article["cost"]["input_tokens"],
             "output_tokens": article["cost"]["output_tokens"],
+            "app_status": article["status"],
             "host_url": None,
             "is_auto_deployed": False,
             "deploy_failed_reason": None,
         }
         c2a.append(item)
+        if article["status"] != "done":
+            print(f"{article['uuid']} not done, skipping...")
+            continue
 
         uuid_str = article_path.stem
         dockerfile_list = list((WORKSPACE_BASE / uuid_str).glob("*/Dockerfile"))
