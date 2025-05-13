@@ -122,7 +122,10 @@ def main():
                 host_port += 1
 
             print(f"Check if container {uuid_str} exists")
-            container = docker_cli.containers.get(uuid_str)
+            try:
+                container = docker_cli.containers.get(uuid_str)
+            except docker.errors.NotFound:
+                container = None
             if container:
                 print(f"Container {uuid_str} exists, removing...")
                 container.remove(force=True)
