@@ -137,9 +137,9 @@ def main():
 
             item["host_url"] = f"{BASE_URL}:{host_port}"
             item["is_auto_deployed"] = alive
-        except:
-            traceback.print_exc()
-            print(f"Failed to build or run docker image for {uuid_str}")
+        except Exception as e:
+            # traceback.print_exc()
+            print(f"Failed to build or run docker image for {uuid_str}:{type(e)} {e}")
             item["deploy_failed_reason"] = f"Failed to build or run: {traceback.format_exc()}"
 
     pd.DataFrame(c2a).to_csv(BASE_DIR / "c2a.csv", index=False)
