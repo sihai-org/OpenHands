@@ -133,6 +133,7 @@ def main():
             if alive:
                 print(f"Container for task {container.name} is alive and healthy. Setting auto restart on it.")
                 container.update(restart_policy={"Name": "always"})
+                item["host_url"] = f"{BASE_URL}:{host_port}"
             else:
                 item["deploy_failed_reason"] = failed_reason
                 print(f"task {uuid_str} is not alive: {failed_reason}")
@@ -140,7 +141,6 @@ def main():
                 container.remove(force=True)
                 print(f"Container {container.id} stopped and removed.")
 
-            item["host_url"] = f"{BASE_URL}:{host_port}"
             item["is_auto_deployed"] = alive
         except Exception as e:
             # traceback.print_exc()
