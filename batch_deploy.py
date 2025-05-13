@@ -120,10 +120,15 @@ def main():
             while check_port_in_use(host_port):
                 host_port += 1
 
-            print(f"Running docker container for {uuid_str} on port {host_port}")
-            container_port = get_expose_port(dockerfile_path)
-            container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
-            print(f"Trying to start container {container.name}...")
+            print(f"Check if container {uuid_str} exists")
+            container = docker_cli.containers.get(uuid_str)
+            if container:
+                print(f"Container {uuid_str} exists")
+            else:
+                print(f"Running docker container for {uuid_str} on port {host_port}")
+                container_port = get_expose_port(dockerfile_path)
+                print(f"Trying to start container {container.name}...")
+                container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
             alive, failed_reason = check_aliveness(container, host_port)
             if alive:
                 print(f"Container for task {container.name} is alive and healthy. Setting auto restart on it.")
