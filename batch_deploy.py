@@ -59,14 +59,19 @@ def check_aliveness(
     start = time.time()
     while time.time() - start < timeout:
         try:
+            time.sleep(interval)
             container.reload()
             if container.status == "running":
-                resp = requests.get(f"http://localhost:{host_port}", timeout=5)
-                if resp.status_code == 200:
-                    return True, None
+                try:
+                    resp = requests.get(f"http://localhost:{host_port}", timeout=5)
+                    resp.raise_for_status()
+                    if resp.status_code == 200:
+                        return True, None
+                except Exception as e:
+                    print(f"Error checking container health: {e}, retrying...")
+                    continue
             elif container.status == "exited":
                 return False, f"Container exited with code {container.attrs['State']['ExitCode']}"
-            time.sleep(interval)
         except:
             return False, traceback.format_exc()
     return False, f"aliveness check timeout after {timeout} seconds, container status: {container.status}"
