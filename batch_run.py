@@ -1,4 +1,3 @@
-import importlib
 import json
 import multiprocessing
 import os
@@ -9,16 +8,19 @@ from pathlib import Path
 
 NUM_PROCESSES = 8
 
-BASE = Path("./ruic_first200")
-CONFIG_FILE = BASE / "config.toml"
-LLM_CONFIG = "openrouter-claude37-csdn"
+META_BASE = Path("ruic")
+CONFIG_FILE = META_BASE / "config.toml"
+ARTICLES_FILE = META_BASE / "selected_articles.json"
+PROMPT_FILE = META_BASE / "prompt_c2a_v2.prompt"
+
+BASE = Path("./ruic_5articles_gpt-4-1-2025-04-14")
+LLM_CONFIG = "5articles-gpt-4-1-2025-04-14"
 WORKSPACE_BASE = BASE / "workspace"
-WORKSPACE_BASE.mkdir(parents=True, exist_ok=True)
-ARTICLES_FILE = BASE / "selected_articles.json"
-PROMPT_FILE = BASE / "prompt_c2a_v2.prompt"
 ARTICLES_DIR = BASE / "articles"
-ARTICLES_DIR.mkdir(parents=True, exist_ok=True)
 LOG_BASE = BASE / "logs"
+BASE.mkdir(parents=True, exist_ok=True)
+WORKSPACE_BASE.mkdir(parents=True, exist_ok=True)
+ARTICLES_DIR.mkdir(parents=True, exist_ok=True)
 LOG_BASE.mkdir(parents=True, exist_ok=True)
 
 
@@ -48,19 +50,26 @@ def run_datou(uuid_str: str):
         f"--llm-config={LLM_CONFIG}",
     ]
     os.environ["WORKSPACE_BASE"] = str(workspace_dir)
-    os.environ["DATOU_LOG_DIR"] = str(log_dir)
 
     article["status"] = "running"
     json.dump(article, article_path.open("w"), ensure_ascii=False, indent=4)
 
+    import openhands.core.main as headless_main
+    import openhands.core.logger as oh_logger
+
+    oh_logger.LOG_DIR = log_dir
+    new_handler = oh_logger.get_file_handler(str(log_dir), oh_logger.current_log_level)
+    new_prompt_logger = oh_logger._get_llm_file_handler("prompt", oh_logger.current_log_level)
+    new_response_logger = oh_logger._get_llm_file_handler("response", oh_logger.current_log_level)
+
+    headless_main.logger.addHandler(new_handler)
+    oh_logger.llm_prompt_logger.addHandler(new_prompt_logger)
+    oh_logger.llm_response_logger.addHandler(new_response_logger)
+
+    args = headless_main.parse_arguments()
+    config: headless_main.AppConfig = headless_main.setup_config_from_args(args)
+    sid = headless_main.generate_sid(config, None)
     try:
-        # Openhands main
-        import openhands.core.logger
-        importlib.reload(openhands.core.logger)
-        import openhands.core.main as headless_main
-        args = headless_main.parse_arguments()
-        config: headless_main.AppConfig = headless_main.setup_config_from_args(args)
-        sid = headless_main.generate_sid(config, None)
         state: headless_main.State = headless_main.asyncio.run(
             headless_main.run_controller(
                 config=config,
@@ -81,8 +90,10 @@ def run_datou(uuid_str: str):
         traceback.print_exc()
         article["status"] = "failed"
     finally:
-        os.system(f"docker stop openhands-runtime-{sid}")
-        os.system(f"docker rm openhands-runtime-{sid}")
+        headless_main.logger.removeHandler(new_handler)
+        oh_logger.llm_prompt_logger.removeHandler(new_prompt_logger)
+        oh_logger.llm_response_logger.removeHandler(new_response_logger)
+        os.system(f"docker rm -f openhands-runtime-{sid}")
         json.dump(article, article_path.open("w"), ensure_ascii=False, indent=4)
 
 
@@ -108,7 +119,7 @@ def main():
     with ARTICLES_FILE.open() as f:
         articles = json.load(f)
     print(f"Loaded {len(articles)} articles")
-    filtered_articles = articles  # [article for article in articles if filter_condition(article)]
+    filtered_articles = articles
     print(f"{len(filtered_articles)} articles to process:")
     # print(*[article["title"] for article in remained_articles], sep="\n")
     prompt = PROMPT_FILE.read_text()
