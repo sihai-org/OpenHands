@@ -61,6 +61,7 @@ CACHE_PROMPT_SUPPORTED_MODELS = [
 # function calling supporting models
 FUNCTION_CALLING_SUPPORTED_MODELS = [
     'claude-3-7-sonnet-20250219',
+    # 'claude-3.7-sonnet',
     'claude-sonnet-3-7-latest',
     'claude-3-5-sonnet',
     'claude-3-5-sonnet-20240620',
