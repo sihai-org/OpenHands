@@ -10,11 +10,11 @@ NUM_PROCESSES = 8
 
 META_BASE = Path("ruic")
 CONFIG_FILE = META_BASE / "config.toml"
-ARTICLES_FILE = META_BASE / "selected_articles.json"
-PROMPT_FILE = META_BASE / "prompt_c2a_v2.prompt"
+ARTICLES_FILE = META_BASE / "csdn_10k_category_385_random20.json"
+PROMPT_FILE = META_BASE / "prompt_c2a_v4.prompt"
 
-BASE = Path("./ruic_5articles_gpt-4-1-2025-04-14")
-LLM_CONFIG = "5articles-gpt-4-1-2025-04-14"
+BASE = Path("./ruic_385_200")
+LLM_CONFIG = "openrouter-claude37-385-20"
 WORKSPACE_BASE = BASE / "workspace"
 ARTICLES_DIR = BASE / "articles"
 LOG_BASE = BASE / "logs"
@@ -30,7 +30,7 @@ def run_datou(uuid_str: str):
     workspace_dir = WORKSPACE_BASE / uuid_str
     log_dir = LOG_BASE / uuid_str
 
-    if article["status"] == "done":
+    if "status" in article and article["status"] == "done":
         print(f"Article {uuid_str} done, skipped.")
         return
 
@@ -111,22 +111,15 @@ def worker(task_queue: multiprocessing.Queue, result_queue: multiprocessing.Queu
             result_queue.put(res)
 
 
-# def filter_condition(article):
-#     return article["executable"] and article["complexity"] >= 2
-
-
 def main():
     with ARTICLES_FILE.open() as f:
         articles = json.load(f)
     print(f"Loaded {len(articles)} articles")
-    filtered_articles = articles
-    print(f"{len(filtered_articles)} articles to process:")
-    # print(*[article["title"] for article in remained_articles], sep="\n")
     prompt = PROMPT_FILE.read_text()
 
     task_queue, result_queue = multiprocessing.Queue(), multiprocessing.Queue()
 
-    for article in filtered_articles:
+    for article in articles:
         task_content = prompt.replace("{{content_source}}", f"{article['title']}\n{article['article']['md']}")
         article["article"]["prompt"] = task_content
         uuid_str = article["uuid"]

@@ -10,18 +10,18 @@ import docker.models.containers
 import pandas as pd
 import requests
 
-BASE_DIR = Path("ruic_first200")
+BASE_DIR = Path("ruic_385_20")
 WORKSPACE_BASE = BASE_DIR / "workspace"
 ARTICLE_BASE = BASE_DIR / "articles"
-ARTICLES = BASE_DIR / "selected_articles.json"
-BASE_URL = "http://articles.datou.me"
+ARTICLES = Path("ruic") / "csdn_10k_category_385_random20.json"
+BASE_URL = "http://show.datou.me"
 PORT_START = 9001
 
 docker_cli = docker.from_env()
 
 
 def docker_build(work_dir: Path, uuid_str: str):
-    return docker_cli.images.build(path=str(work_dir), tag=f"{uuid_str}:latest", rm=True)
+    return docker_cli.images.build(path=str(work_dir), tag=f"{BASE_DIR}-{uuid_str}:latest", rm=True)
 
 
 def docker_run(image: str, uuid_str: str, host_port: int, container_port: int):
@@ -33,7 +33,7 @@ def docker_run(image: str, uuid_str: str, host_port: int, container_port: int):
         stdin_open=True,
         tty=True,
         auto_remove=False,
-        name=uuid_str,
+        name=f"{BASE_DIR}-{uuid_str}",
     )
     return container
 
@@ -60,7 +60,7 @@ def get_port(dockerfile_path: Path):
 
 
 def check_aliveness(
-        container: docker.models.containers.Container, host_port, timeout: int = 20, interval: int = 3
+    container: docker.models.containers.Container, host_port, timeout: int = 20, interval: int = 3
 ) -> tuple[bool, str | None]:
     start = time.time()
     while time.time() - start < timeout:
@@ -115,13 +115,13 @@ def main():
             continue
 
         uuid_str = article_path.stem
-        dockerfile_list = list((WORKSPACE_BASE / uuid_str).glob("*/Dockerfile"))
+        dockerfile_list = list((WORKSPACE_BASE / uuid_str).glob("**/Dockerfile"))
         dockerfile_path = dockerfile_list[0] if dockerfile_list else None
         if not dockerfile_path:
             item["deploy_failed_reason"] = "no dockerfile found"
             continue
-        print(f"Building docker image for {uuid_str}")
-        image_name = f"{uuid_str}:latest"
+        print(f"Building docker image for {BASE_DIR}-{uuid_str}:latest")
+        image_name = f"{BASE_DIR}-{uuid_str}:latest"
         try:
             try:
                 image = docker_cli.images.get(name=image_name)
@@ -144,7 +144,7 @@ def main():
                 print(f"Container {uuid_str} exists, removing...")
                 container.remove(force=True)
             print(f"Running docker container for {uuid_str} on port {host_port}")
-            container_port = get_port(dockerfile_path)
+            container_port = 8000
             container = docker_run(f"{uuid_str}:latest", uuid_str, host_port, container_port)
             alive, failed_reason = check_aliveness(container, host_port)
             if alive:
