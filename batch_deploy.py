@@ -91,6 +91,10 @@ def main(base_dir: Path, articles: Path, base_url: str, port_start: int, contain
             continue
         with article_path.open() as f:
             article = json.load(f)
+
+        uuid_str = article_path.stem
+        container_name = f"{base_dir.name}-{uuid_str}"
+        image_name = f"{uuid_str}:{base_dir.name}"
         item = {
             "uuid": article["uuid"],
             "url": article["url"],
@@ -105,20 +109,18 @@ def main(base_dir: Path, articles: Path, base_url: str, port_start: int, contain
             "host_url": None,
             "is_auto_deployed": False,
             "deploy_failed_reason": None,
+            "docker_cmd": f"docker run -it --rm --name {container_name} -p HOST_PORT:{container_port} -e PORT={container_port} {image_name}",
         }
         c2a.append(item)
         if article["status"] != "done":
             print(f"{article['uuid']} not done, skipping...")
             continue
 
-        uuid_str = article_path.stem
         dockerfile_list = list((workspace_base / uuid_str).glob("**/Dockerfile"))
         dockerfile_path = dockerfile_list[0] if dockerfile_list else None
         if not dockerfile_path:
             item["deploy_failed_reason"] = "no dockerfile found"
             continue
-        container_name = f"{base_dir.name}-{uuid_str}"
-        image_name = f"{uuid_str}:{base_dir.name}"
         print(f"Building docker image image_name")
         try:
             try:
@@ -148,6 +150,7 @@ def main(base_dir: Path, articles: Path, base_url: str, port_start: int, contain
                 print(f"Container app {container.name} is alive and healthy. Setting auto restart on it.")
                 container.update(restart_policy={"Name": "always"})
                 item["host_url"] = f"{base_url}:{host_port}"
+                item["docker_cmd"] = item["docker_cmd"].replace("HOST_PORT", str(host_port))
             else:
                 item["deploy_failed_reason"] = failed_reason
                 print(f"container app {container_name} is not alive: {failed_reason}")
