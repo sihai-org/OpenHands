@@ -85,6 +85,7 @@ def main(base_dir: Path, articles: Path, base_url: str, port_start: int, contain
     c2a = []
     with articles.open() as f:
         articles = json.load(f)
+    host_port = port_start
     for origin_article in articles:
         article_path = article_base / f"{origin_article['uuid']}.json"
         if not article_path.exists():
@@ -131,26 +132,34 @@ def main(base_dir: Path, articles: Path, base_url: str, port_start: int, contain
 
             print(f"got image {image}, trying to run...")
 
-            host_port = port_start
-            while check_port_in_use(host_port):
-                host_port += 1
-
             print(f"Check if container: {container_name} exists")
             try:
                 container = docker_cli.containers.get(container_name)
             except docker.errors.NotFound:
                 container = None
+            check_on_port = host_port
             if container:
-                print(f"Container {container_name} exists...")
-            else:
+                print(f"Container {container_name} exists")
+                existed_port = next((hp[0]["HostPort"] for cp, hp in container.ports.items() if hp), None)
+                if existed_port:
+                    check_on_port = existed_port
+                else:
+                    print(f"Container {container_name} not working, removing it...")
+                    container.remove(force=True)
+                    container = None
+            if not container:
+                while check_port_in_use(host_port):
+                    host_port += 1
                 print(f"Running docker container for {container_name} on port {host_port}")
                 container = docker_run(image_name, container_name, host_port, container_port)
-            alive, failed_reason = check_aliveness(container, host_port)
+                check_on_port = host_port
+            alive, failed_reason = check_aliveness(container, check_on_port)
+
             if alive:
                 print(f"Container app {container.name} is alive and healthy. Setting auto restart on it.")
                 container.update(restart_policy={"Name": "always"})
-                item["host_url"] = f"{base_url}:{host_port}"
-                item["docker_cmd"] = item["docker_cmd"].replace("HOST_PORT", str(host_port))
+                item["host_url"] = f"{base_url}:{check_on_port}"
+                item["docker_cmd"] = item["docker_cmd"].replace("HOST_PORT", str(check_on_port))
             else:
                 item["deploy_failed_reason"] = failed_reason
                 print(f"container app {container_name} is not alive: {failed_reason}")
